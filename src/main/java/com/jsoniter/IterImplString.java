@@ -109,7 +109,7 @@ class IterImplString {
             if (c == '"') {
                 return i + 1;
             } else if (c == '\\') {
-                throw iter.reportError("findSliceEnd", "slice does not support escape char");
+                i++;
             }
         }
         return -1;
