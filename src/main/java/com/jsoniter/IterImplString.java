@@ -195,10 +195,15 @@ class IterImplString {
                             value = (value << 4) | digit;
                         }
 
-                        try {
-                            cache.put(("" + ((char) value)).getBytes("utf-8"));
-                        } catch (UnsupportedEncodingException e) {
-                            throw new RuntimeException();
+                        if (0 <= value
+                                && value <= Byte.MAX_VALUE) {
+                            cache.put((byte) value);
+                        } else {
+                            try {
+                                cache.put(("" + ((char) value)).getBytes("utf-8"));
+                            } catch (UnsupportedEncodingException e) {
+                                throw new RuntimeException();
+                            }
                         }
 
                         i += 5;
