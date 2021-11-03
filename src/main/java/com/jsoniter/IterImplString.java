@@ -32,8 +32,24 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 package com.jsoniter;
 
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
+import java.nio.ByteBuffer;
+import java.util.Arrays;
 
 class IterImplString {
+
+    private final static int[] sHexValues = new int[128];
+
+    static {
+        Arrays.fill(sHexValues, -1);
+        for (int i = 0; i < 10; ++i) {
+            sHexValues['0' + i] = i;
+        }
+        for (int i = 0; i < 6; ++i) {
+            sHexValues['a' + i] = 10 + i;
+            sHexValues['A' + i] = 10 + i;
+        }
+    }
 
     final static int[] hexDigits = new int['f' + 1];
 
@@ -71,7 +87,7 @@ class IterImplString {
         // this code will trigger jvm hotspot pattern matching to highly optimized assembly
         int bound = iter.reusableChars.length;
         bound = IterImpl.updateStringCopyBound(iter, bound);
-        for(int j = 0; j < bound; j++) {
+        for (int j = 0; j < bound; j++) {
             c = iter.buf[i++];
             if (c == '"') {
                 iter.head = i;
@@ -109,9 +125,117 @@ class IterImplString {
             if (c == '"') {
                 return i + 1;
             } else if (c == '\\') {
-                i++;
+                throw iter.reportError("findSliceEnd", "slice does not support escape char");
             }
         }
         return -1;
     }
+
+    // slice does not allow escape
+    final static FindSliceEndResponse findSliceEnd2(JsonIterator iter, ByteBuffer cache) {
+        for (int i = iter.head; i < iter.tail; i++) {
+            byte c = iter.buf[i];
+            if (c == '"') {
+                return new FindSliceEndResponse(i + 1);
+            } else if (c == '\\') {
+                return findSliceEndSpecailChar(iter, i, cache);
+            }
+        }
+        return null;
+    }
+
+    private static FindSliceEndResponse findSliceEndSpecailChar(JsonIterator iter, int specialcharIndex, ByteBuffer cache) {
+        cache.put(iter.buf, iter.head, specialcharIndex - iter.head);
+
+        for (int i = specialcharIndex; i < iter.tail; i++) {
+            byte c = iter.buf[i];
+            if (c == '"') {
+                cache.flip();
+                byte[] newarray = new byte[cache.limit()];
+                cache.get(newarray, 0, newarray.length);
+                return new FindSliceEndResponse(newarray, i + 1);
+            } else if (c == '\\') {
+                byte nextc = iter.buf[i + 1];
+                switch (nextc) {
+                    // First, ones that are mapped
+                    case 'b':
+                        i++;
+                        cache.put((byte) '\b');
+                        break;
+                    case 't':
+                        i++;
+                        cache.put((byte) '\t');
+                        break;
+                    case 'n':
+                        i++;
+                        cache.put((byte) '\n');
+                        break;
+                    case 'f':
+                        i++;
+                        cache.put((byte) '\f');
+                        break;
+                    case 'r':
+                        i++;
+                        cache.put((byte) '\r');
+                        break;
+                    case '"':
+                    case '/':
+                    case '\\':
+                        i++;
+                        cache.put((byte) nextc);
+                        break;
+                    case 'u': // and finally hex-escaped
+                        // Ok, a hex escape. Need 4 characters
+                        int value = 0;
+                        for (int ui = 0; ui < 4; ++ui) {
+                            int digit = sHexValues[iter.buf[i + 2 + ui]];
+                            if (digit < 0) {
+                                throw new RuntimeException("expected a hex-digit for character escape sequence");
+                            }
+                            value = (value << 4) | digit;
+                        }
+
+                        try {
+                            cache.put(("" + ((char) value)).getBytes("utf-8"));
+                        } catch (UnsupportedEncodingException e) {
+                            throw new RuntimeException();
+                        }
+
+                        i += 5;
+
+                        break;
+
+                    default:
+                        throw new IllegalArgumentException("char=" + nextc);
+                }
+            } else {
+                cache.put(c);
+            }
+        }
+
+        return null;
+    }
+
+    public static class FindSliceEndResponse {
+        byte[] bytes;
+        int end;
+
+        public FindSliceEndResponse(int end) {
+            this.end = end;
+        }
+
+        public FindSliceEndResponse(byte[] bytes, int end) {
+            this.bytes = bytes;
+            this.end = end;
+        }
+
+        public int getEnd() {
+            return end;
+        }
+
+        public byte[] getBytes() {
+            return bytes;
+        }
+    }
+
 }

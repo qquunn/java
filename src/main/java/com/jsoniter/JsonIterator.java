@@ -9,6 +9,7 @@ import java.io.InputStream;
 import java.lang.reflect.Type;
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -208,6 +209,10 @@ public class JsonIterator implements Closeable {
 
     public final Slice readStringAsSlice() throws IOException {
         return IterImpl.readSlice(this);
+    }
+
+    public final Slice readStringAsSlice2(ByteBuffer cache) throws IOException {
+        return IterImpl.readSlice2(this, cache);
     }
 
     public final String readObject() throws IOException {

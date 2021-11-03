@@ -6,6 +6,7 @@ import com.jsoniter.spi.Slice;
 
 import java.io.IOException;
 import java.math.BigInteger;
+import java.nio.ByteBuffer;
 
 class IterImpl {
 
@@ -151,6 +152,31 @@ class IterImpl {
             iter.reusableSlice.reset(iter.buf, iter.head, end - 1);
             iter.head = end;
             return iter.reusableSlice;
+        }
+    }
+
+    // read the bytes between " "
+    public final static Slice readSlice2(JsonIterator iter, ByteBuffer cache) throws IOException {
+        if (IterImpl.nextToken(iter) != '"') {
+            throw iter.reportError("readSlice", "expect \" for string");
+        }
+        IterImplString.FindSliceEndResponse sliceEndResponse = IterImplString.findSliceEnd2(iter, cache);
+        if (sliceEndResponse == null) {
+            throw iter.reportError("readSlice", "incomplete string");
+        } else {
+            int end = sliceEndResponse.getEnd();
+
+            if(sliceEndResponse.getBytes() != null){
+                // reuse current buffer
+                iter.reusableSlice.reset(sliceEndResponse.getBytes(), 0, sliceEndResponse.getBytes().length);
+                iter.head = end;
+                return iter.reusableSlice;
+            }else {
+                // reuse current buffer
+                iter.reusableSlice.reset(iter.buf, iter.head, end - 1);
+                iter.head = end;
+                return iter.reusableSlice;
+            }
         }
     }
 
